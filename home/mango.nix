@@ -28,7 +28,8 @@ let
   # ── Змінні, щоб не дублювати шляхи в біндах ─────────────────────────────────
   term = "${pkgs.foot}/bin/foot";
   launcher = "${pkgs.fuzzel}/bin/fuzzel";
-  filemgr = "${pkgs.nemo}/bin/nemo";
+  # Nautilus, а не nemo — див. пояснення вибору в home/default.nix.
+  filemgr = "${pkgs.nautilus}/bin/nautilus";
   browser = "${pkgs.firefox}/bin/firefox";
 
   screenshotArea = "${pkgs.grim}/bin/grim -g \"$(${pkgs.slurp}/bin/slurp)\" - | ${pkgs.satty}/bin/satty --filename -";
@@ -111,6 +112,11 @@ let
     no_border_when_single=1
     smartgaps=0
 
+    # Кількість тегів. Задано ЯВНО, бо від цього залежать бінди SUPER+1..9:
+    # апстрімний дефолт теж 9, але покладатися на нього означає, що зміна
+    # дефолту в наступній версії Mango мовчки зламає частину біндів.
+    tag_num=9
+
     # ── Кольори ───────────────────────────────────────────────────────────────
     # ЦІ ЗНАЧЕННЯ ПЕРЕВИЗНАЧАЮТЬСЯ ФАЙЛОМ, ЯКИЙ ГЕНЕРУЄ MATUGEN.
     # Він підключається останнім рядком (source=colors.conf), тому те,
@@ -190,7 +196,7 @@ let
     bind=SUPER,b,spawn,${browser}
     bind=SUPER+SHIFT,e,spawn,${pkgs.wlogout}/bin/wlogout
     bind=SUPER,v,spawn_shell,${clipMenu}
-    bind=SUPER,period,spawn,${pkgs.smile}/bin/smile
+    bind=SUPER,period,spawn,${pkgs.gnome-characters}/bin/gnome-characters
 
     # ── Вікна ─────────────────────────────────────────────────────────────────
     bind=SUPER,q,killclient,
@@ -255,7 +261,8 @@ let
     bind=SUPER,7,view,7
     bind=SUPER,8,view,8
     bind=SUPER,9,view,9
-    bind=SUPER,0,view,0
+    # SUPER,0 свідомо НЕ прив'язаний: тегів дев'ять (tag_num=9 вище),
+    # тега «0» не існує, і бінд на нього мовчки нічого не робив. Аудит A-046.
 
     bind=SUPER+SHIFT,1,tag,1
     bind=SUPER+SHIFT,2,tag,2
@@ -285,17 +292,25 @@ let
 
     # ── Блокування ────────────────────────────────────────────────────────────
     # bindl = працює навіть коли екран уже заблоковано.
-    bindl=SUPER+SHIFT,l,spawn,${pkgs.swaylock}/bin/swaylock -f
+    #
+    # БУЛО SUPER+SHIFT+l — і це конфліктувало з exchange_client,right вище
+    # (та сама комбінація, два різні бінди). Аудит A-045.
+    # Escape вільний і його важко натиснути випадково.
+    bindl=SUPER,Escape,spawn,${pkgs.swaylock}/bin/swaylock -f
 
     # ── Медіаклавіші ──────────────────────────────────────────────────────────
     # bindl, бо гучність і яскравість мають працювати на локскріні.
-    bindl=NONE,XF86AudioRaiseVolume,spawn,${pkgs.wireplumber}/bin/wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+
-    bindl=NONE,XF86AudioLowerVolume,spawn,${pkgs.wireplumber}/bin/wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
-    bindl=NONE,XF86AudioMute,spawn,${pkgs.wireplumber}/bin/wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
-    bindl=NONE,XF86AudioMicMute,spawn,${pkgs.wireplumber}/bin/wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+    # ЧЕРЕЗ swayosd-client, А НЕ wpctl/brightnessctl НАПРЯМУ.
+    # Аудит A-042: раніше тут стояли прямі виклики, і гучність змінювалась,
+    # але НІЧОГО НЕ ЗʼЯВЛЯЛОСЬ НА ЕКРАНІ — swayosd-server працював у порожнечу,
+    # бо його ніхто не викликав. swayosd-client і змінює значення, і малює OSD.
+    bindl=NONE,XF86AudioRaiseVolume,spawn,${pkgs.swayosd}/bin/swayosd-client --output-volume raise --max-volume 150
+    bindl=NONE,XF86AudioLowerVolume,spawn,${pkgs.swayosd}/bin/swayosd-client --output-volume lower
+    bindl=NONE,XF86AudioMute,spawn,${pkgs.swayosd}/bin/swayosd-client --output-volume mute-toggle
+    bindl=NONE,XF86AudioMicMute,spawn,${pkgs.swayosd}/bin/swayosd-client --input-volume mute-toggle
 
-    bindl=NONE,XF86MonBrightnessUp,spawn,${pkgs.brightnessctl}/bin/brightnessctl set 5%+
-    bindl=NONE,XF86MonBrightnessDown,spawn,${pkgs.brightnessctl}/bin/brightnessctl set 5%-
+    bindl=NONE,XF86MonBrightnessUp,spawn,${pkgs.swayosd}/bin/swayosd-client --brightness raise
+    bindl=NONE,XF86MonBrightnessDown,spawn,${pkgs.swayosd}/bin/swayosd-client --brightness lower
 
     bindl=NONE,XF86AudioPlay,spawn,${pkgs.playerctl}/bin/playerctl play-pause
     bindl=NONE,XF86AudioNext,spawn,${pkgs.playerctl}/bin/playerctl next

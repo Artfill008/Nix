@@ -366,6 +366,23 @@
   #
   # Альтернатива — робити те саме руками через dbus-update-activation-environment
   # і купу After=/WantedBy=. Працює, але ламається від кожної зміни.
+  # ДВА ЗАПИСИ СЕСІЇ — ЦЕ СВІДОМО, А НЕ НЕДОГЛЯД (аудит A-041).
+  #
+  # У ReGreet ти побачиш:
+  #   «Mango (UWSM)»  ← основний. Сесія в правильних systemd-scope,
+  #                      коректне прибирання при виході.
+  #   «mango»          ← запасний. Його додає сам модуль programs.mango
+  #                      через services.displayManager.sessionPackages.
+  #
+  # Запасний СВІДОМО не прибраний: якщо uwsm колись зламається після
+  # оновлення, без нього не лишиться ЖОДНОГО способу увійти в графіку,
+  # і єдиним шляхом буде tty + відкат покоління. Ціна — один зайвий рядок
+  # у списку сесій. Це вигідний обмін.
+  #
+  # autostart.sh (home/mango.nix) навмисно ідемпотентний і безпечний під
+  # обома: dbus-update-activation-environment і `systemctl --user start
+  # graphical-session.target` під uwsm просто нічого не змінюють, бо uwsm
+  # це вже зробив.
   programs.uwsm = {
     enable = true;
     waylandCompositors.mango = {
@@ -390,16 +407,39 @@
     };
   };
 
-  # Яскравість через swayosd вимагає прав на /sys/class/backlight.
-  # Група video цього не дає для запису — потрібне udev-правило.
-  services.udev.extraRules = ''
-    # Дозволяємо групі video керувати підсвіткою (і Intel, і NVIDIA-вузол).
-    ACTION=="add", SUBSYSTEM=="backlight", RUN+="${pkgs.coreutils}/bin/chgrp video /sys/class/backlight/%k/brightness"
-    ACTION=="add", SUBSYSTEM=="backlight", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/backlight/%k/brightness"
-    # Те саме для світлодіодів клавіатури (CapsLock-індикатор swayosd).
-    ACTION=="add", SUBSYSTEM=="leds", RUN+="${pkgs.coreutils}/bin/chgrp input /sys/class/leds/%k/brightness"
-    ACTION=="add", SUBSYSTEM=="leds", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/leds/%k/brightness"
-  '';
+  # Права на /sys/class/backlight і /sys/class/leds.
+  #
+  # БУЛО: власноруч написані udev-правила з chgrp/chmod. Аудит A-043 показав,
+  # що пакет swayosd ВЖЕ несе `data/udev/99-swayosd.rules`, які роблять рівно
+  # те саме — тобто ми дублювали апстрім і ризикували розійтися з ним.
+  # Тепер беремо правила з пакета: одне джерело істини, оновлюється разом із ним.
+  services.udev.packages = [ pkgs.swayosd ];
+
+  # ── swayosd: системний backend ──────────────────────────────────────────────
+  # ЦЕ ТЕ, ЧОГО БРАКУВАЛО (аудит A-042).
+  # swayosd-server лише МАЛЮЄ індикатор. Щоб він щось малював, потрібне
+  # джерело подій. Їх два, і ми використовуємо обидва:
+  #   1. swayosd-client із біндів Mango — основний шлях (див. home/mango.nix);
+  #   2. swayosd-libinput-backend — ловить клавіші на рівні libinput,
+  #      тобто працює і там, де бінд не дійшов (наприклад, на локскріні).
+  #
+  # Backend читає /dev/input, тому це СИСТЕМНА служба, а не user-сервіс.
+  systemd.services.swayosd-libinput-backend = {
+    description = "SwayOSD: перехоплення клавіш гучності/яскравості через libinput";
+    wantedBy = [ "graphical.target" ];
+    partOf = [ "graphical.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.swayosd}/bin/swayosd-libinput-backend";
+      Restart = "on-failure";
+      RestartSec = 5;
+      # Мінімальні привілеї: потрібен лише доступ до пристроїв вводу.
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      NoNewPrivileges = true;
+    };
+  };
 
   systemd.user.services.polkit-gnome-authentication-agent-1 = {
     description = "polkit-gnome authentication agent";
