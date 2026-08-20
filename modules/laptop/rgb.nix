@@ -122,6 +122,27 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Джерело msiklm ще не має справжнього NAR-хешу (див. pkgs/msiklm/default.nix).
+    # Зупиняємо збірку тут, зрозумілим текстом, замість того щоб дати їй впасти
+    # на «hash mismatch» уже під час завантаження джерел.
+    #
+    # Принцип, який це захищає: RGB-підсвітка НЕ МАЄ ПРАВА ламати завантаження
+    # системи. Поки хеш невідомий — фіча просто недоступна.
+    assertions = [
+      {
+        assertion = pkgs.msiklm.src.outputHash or "" != lib.fakeHash;
+        message = ''
+          gt72s.rgb.enable = true, але джерело msiklm ще з lib.fakeHash.
+
+          Порахуй хеш і встав його у pkgs/msiklm/default.nix:
+              nix run nixpkgs#nix-prefetch-github -- \
+                Gibtnix MSIKLM --rev e9a75942d85612869e32f14d4ec0e6ad5b4514ed
+
+          Або просто запусти ./bootstrap.sh — він робить це автоматично.
+        '';
+      }
+    ];
+
     environment.systemPackages = [
       pkgs.msiklm
       applyRgb

@@ -117,20 +117,48 @@ in
       default = true;
     };
 
+    # ── Джерело модуля ────────────────────────────────────────────────────────
+    # ЗА ЗАМОВЧУВАННЯМ беремо пакет із nixpkgs. Він має СПРАВЖНІЙ хеш
+    # (rev ed92e2eb, 2025-09-17) і тому реально збирається.
+    #
+    # ЧОМУ ЦЕ ЗМІНЕНО: раніше тут стояв override на свіжішу ревізію з
+    # `hash = lib.fakeHash`, і оскільки `enable` за замовчуванням true,
+    # ДЕФОЛТНА ЗБІРКА СИСТЕМИ ГАРАНТОВАНО ПАДАЛА на hash mismatch.
+    # Fake-хеш проходить eval і падає лише на fixed-output derivation,
+    # тому статичний аналіз його не ловив.
+    #
+    # Свіжіша ревізія лишається доступною, але тепер це СВІДОМИЙ opt-in
+    # із обов'язковим справжнім хешем (див. assertion у config нижче).
+    overrideSource = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Збирати msi-ec із власної ревізії замість тієї, що в nixpkgs.
+
+        Вмикай лише якщо ревізія nixpkgs не знає прошивку твого EC,
+        і ти вже порахував хеш:
+
+            nix run nixpkgs#nix-prefetch-github -- \
+              BeardOverflow msi-ec --rev <SHA>
+      '';
+    };
+
     rev = lib.mkOption {
       type = lib.types.str;
       # Перевірено: у цій ревізії msi-ec.c рядок 824 містить "1782EMS1.109".
       default = "d7fbbd88e6831e56801b860e46475cbf8ddbc7c1";
-      description = "Ревізія BeardOverflow/msi-ec (має містити 1782EMS1.109).";
+      description = "Ревізія BeardOverflow/msi-ec, коли overrideSource = true.";
     };
 
     hash = lib.mkOption {
       type = lib.types.str;
-      # TODO: перша збірка ВПАДЕ і надрукує правильний хеш — встав його сюди.
-      # Або порахуй заздалегідь:
-      #   nix run nixpkgs#nix-prefetch-github -- BeardOverflow msi-ec --rev d7fbbd88e6831e56801b860e46475cbf8ddbc7c1
       default = lib.fakeHash;
-      description = "NAR-хеш джерела msi-ec.";
+      description = ''
+        NAR-хеш джерела msi-ec. Потрібен ЛИШЕ коли overrideSource = true.
+        Поки тут fakeHash, assertion не дасть увімкнути overrideSource —
+        краще зупинити збірку зрозумілим текстом, ніж дати їй впасти
+        на незрозумілому hash mismatch через пів години компіляції ядра.
+      '';
     };
 
     coolerGuard = {
@@ -171,23 +199,41 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Збираємо модуль зі свіжої ревізії, бо запінена в nixpkgs не знає GT72.
+    assertions = [
+      {
+        assertion = !cfg.overrideSource || cfg.hash != lib.fakeHash;
+        message = ''
+          gt72s.msiEc.overrideSource = true, але gt72s.msiEc.hash досі fakeHash.
+
+          Порахуй справжній хеш і встав його:
+              nix run nixpkgs#nix-prefetch-github -- \
+                BeardOverflow msi-ec --rev ${cfg.rev}
+
+          Без цього збірка впаде на hash mismatch аж після компіляції ядра.
+        '';
+      }
+    ];
+
+    # За замовчуванням — пакет із nixpkgs (справжній хеш, реально збирається).
+    # З overrideSource — власна ревізія, але лише зі справжнім хешем.
     boot.extraModulePackages = [
-      (config.boot.kernelPackages.msi-ec.overrideAttrs (old: {
-        version = "0-unstable-${cfg.rev}";
-        src = pkgs.fetchFromGitHub {
-          owner = "BeardOverflow";
-          repo = "msi-ec";
-          rev = cfg.rev;
-          hash = cfg.hash;
-        };
-        # Патчі з nixpkgs можуть не накластись на свіжий апстрім.
-        # makefile.patch додає KERNELDIR/modules_install — якщо апстрім це вже
-        # має, збірка впаде на «patch does not apply». Тоді прибери відповідний
-        # патч зі списку тут.
-        # TODO: якщо збірка падає на патчах — розкоментуй наступний рядок.
-        # patches = [];
-      }))
+      (
+        if cfg.overrideSource then
+          config.boot.kernelPackages.msi-ec.overrideAttrs (old: {
+            version = "0-unstable-${cfg.rev}";
+            src = pkgs.fetchFromGitHub {
+              owner = "BeardOverflow";
+              repo = "msi-ec";
+              rev = cfg.rev;
+              hash = cfg.hash;
+            };
+            # Патчі nixpkgs можуть не накластись на свіжий апстрім
+            # (makefile.patch додає KERNELDIR/modules_install). Якщо збірка
+            # падає на «patch does not apply» — додай сюди `patches = [];`.
+          })
+        else
+          config.boot.kernelPackages.msi-ec
+      )
     ];
 
     boot.kernelModules = [ "msi-ec" ];

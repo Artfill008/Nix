@@ -77,10 +77,17 @@
         ];
       };
 
-      # Наші інструменти доступні як `nix build .#moewall` / `.#nixmgr` / `.#msiklm`.
+      # Наші інструменти доступні як `nix build .#moewall` / `.#nixmgr` / `.#gt72`.
+      #
+      # msiklm СВІДОМО тут немає: його джерело ще з `lib.fakeHash`
+      # (див. pkgs/msiklm/default.nix — порахувати хеш у середовищі агента
+      # неможливо). `nix flake check` будує все, що є в `packages`, тож
+      # присутність msiklm гарантовано валила б перевірку всього флейка.
+      # Пакет лишається доступним через оверлей, коли gt72s.rgb увімкнено,
+      # і повертається сюди одразу після того, як bootstrap.sh впише хеш.
       packages.${system} = {
-        inherit (pkgs) msiklm moewall nixmgr gt72;
-        default = pkgs.moewall;
+        inherit (pkgs) moewall nixmgr gt72;
+        default = pkgs.gt72;
       };
 
       # `nix develop` для розробки Rust-інструментів.

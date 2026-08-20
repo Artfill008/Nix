@@ -25,10 +25,24 @@ stdenv.mkDerivation (finalAttrs: {
   src = fetchFromGitHub {
     owner = "Gibtnix";
     repo = "MSIKLM";
-    # TODO: підстав повний 40-символьний SHA. Скорочений теж працює в
-    # fetchFromGitHub, але повний надійніший.
-    rev = "e9a7594";
-    # TODO: перша збірка впаде і надрукує правильний хеш — встав його сюди.
+    # Повний 40-символьний SHA (отримано з історії апстріму).
+    rev = "e9a75942d85612869e32f14d4ec0e6ad5b4514ed";
+
+    # ⚠ ХЕШ ЩЕ НЕ ПОРАХОВАНИЙ.
+    # Порахувати його в середовищі агента неможливо: проксі віддає 403 на
+    # завантаження GitHub-архівів для будь-якого репозиторію, крім твого
+    # власного. Вигадувати число сюди не можна — хибний хеш дає гіршу
+    # помилку, ніж відсутній.
+    #
+    # ЩО РОБИТЬ BOOTSTRAP: `bootstrap.sh` рахує хеш на твоїй машині і
+    # підставляє його сюди автоматично (крок `prefetch-msiklm`).
+    #
+    # ВРУЧНУ:
+    #   nix run nixpkgs#nix-prefetch-github -- \
+    #     Gibtnix MSIKLM --rev e9a75942d85612869e32f14d4ec0e6ad5b4514ed
+    #
+    # Поки тут fakeHash, `gt72s.rgb.enable = true` заблоковано assertion-ом
+    # у modules/laptop/rgb.nix — RGB не має права ламати завантаження.
     hash = lib.fakeHash;
   };
 
