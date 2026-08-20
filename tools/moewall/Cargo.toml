@@ -1,0 +1,37 @@
+[package]
+name = "moewall"
+version = "0.1.0"
+edition = "2021"
+description = "Автоматичні шпалери: пошук, валідація, кольоровий аналіз, matugen"
+license = "MIT"
+
+[dependencies]
+# CLI. derive-режим — щоб підкоманди описувались структурами, а не рядками.
+clap = { version = "4", features = ["derive"] }
+
+# Конфіг і стан.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# HTTP. rustls, а НЕ native-tls: інакше в замикання Nix приїде openssl
+# і збірка почне залежати від системних сертифікатів.
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "json",
+    "rustls-tls",
+] }
+
+# Декодування та аналіз зображень. Вимикаємо дефолтні формати і лишаємо
+# лише ті, що реально бувають на booru — це помітно скорочує час збірки.
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+] }
+
+# Дедуплікація за хешем вмісту.
+sha2 = "0.10"
+
+anyhow = "1"
+dirs = "5"

@@ -1,0 +1,130 @@
+# ── КУРОВАНА ТАБЛИЦЯ ──────────────────────────────────────────────────────────
+#
+# Пакети, які НЕ МОЖНА просто покласти в environment.systemPackages.
+# Їм потрібен модуль NixOS, бо він робить щось, чого пакет сам не вміє:
+# setuid-обгортку, групу, udev-правило, systemd-сервіс, запис у PAM.
+#
+# Це саме КУРОВАНА таблиця, а не автодетект. Причина: визначити «чи є в
+# nixpkgs модуль для цього пакета» програмно неможливо — між іменем пакета
+# і іменем опції немає формального зв'язку (пакет `steam` → `programs.steam`,
+# пакет `wireshark` → `programs.wireshark`, але пакет `docker` → 
+# `virtualisation.docker`, а пакет `_1password-gui` → `programs._1password-gui`).
+#
+# Формат:
+#   [[entry]]
+#   attr   = "атрибут у nixpkgs"
+#   option = "шлях опції, яку треба встановити в true"
+#   why    = "що саме зробить модуль і чого не зробить пакет"
+#
+# ЯК РОЗШИРЮВАТИ: коли натрапиш на пакет, який «встановився, але не працює» —
+# додай сюди рядок. Це нормальний спосіб життя такої таблиці.
+
+[[entry]]
+attr = "steam"
+option = "programs.steam.enable"
+why = "потрібні 32-бітні бібліотеки, окремий FHS-env і firewall-правила для Remote Play"
+
+[[entry]]
+attr = "wireshark"
+option = "programs.wireshark.enable"
+why = "створює групу wireshark і setcap на dumpcap; без модуля захоплення пакетів вимагає root"
+
+[[entry]]
+attr = "gamemode"
+option = "programs.gamemode.enable"
+why = "потрібен D-Bus-сервіс і polkit-правило для зміни governor"
+
+[[entry]]
+attr = "gamescope"
+option = "programs.gamescope.enable"
+why = "потрібен CAP_SYS_NICE для realtime-пріоритету"
+
+[[entry]]
+attr = "_1password-gui"
+option = "programs._1password-gui.enable"
+why = "потрібна setuid-обгортка для інтеграції з браузером і polkit"
+
+[[entry]]
+attr = "virt-manager"
+option = "programs.virt-manager.enable"
+why = "модуль додає dconf-схеми; без них падає при збереженні налаштувань"
+
+[[entry]]
+attr = "adb"
+option = "programs.adb.enable"
+why = "створює групу adbusers і udev-правила для доступу до пристроїв без root"
+
+[[entry]]
+attr = "kdeconnect"
+option = "programs.kdeconnect.enable"
+why = "відкриває діапазон портів у firewall; без цього пристрої не знаходяться"
+
+[[entry]]
+attr = "noisetorch"
+option = "programs.noisetorch.enable"
+why = "потрібен CAP_SYS_RESOURCE для підняття ліміту буферів PipeWire"
+
+[[entry]]
+attr = "nix-ld"
+option = "programs.nix-ld.enable"
+why = "підміняє динамічний лінкер для не-Nix бінарників — це системна зміна"
+
+[[entry]]
+attr = "fish"
+option = "programs.fish.enable"
+why = "shell має бути в /etc/shells, інакше chsh відмовить, а completions не згенеруються"
+
+[[entry]]
+attr = "zsh"
+option = "programs.zsh.enable"
+why = "те саме, що з fish"
+
+[[entry]]
+attr = "hyprland"
+option = "programs.hyprland.enable"
+why = "потрібні портали, session-файл для DM і змінні середовища"
+
+[[entry]]
+attr = "mango"
+option = "programs.mango.enable"
+why = "потрібні xdg-portal-конфіг і реєстрація сесії для дисплей-менеджера"
+
+[[entry]]
+attr = "thunar"
+option = "programs.thunar.enable"
+why = "потрібні tumbler для мініатюр і gvfs; сам пакет їх не тягне"
+
+[[entry]]
+attr = "dconf"
+option = "programs.dconf.enable"
+why = "потрібен D-Bus-сервіс; без нього GTK-налаштування мовчки не зберігаються"
+
+[[entry]]
+attr = "openrgb"
+option = "services.hardware.openrgb.enable"
+why = "потрібні udev-правила і модуль i2c-dev"
+
+[[entry]]
+attr = "docker"
+option = "virtualisation.docker.enable"
+why = "демон, група docker, налаштування cgroups"
+
+[[entry]]
+attr = "podman"
+option = "virtualisation.podman.enable"
+why = "потрібні subuid/subgid і налаштування rootless-мережі"
+
+[[entry]]
+attr = "tailscale"
+option = "services.tailscale.enable"
+why = "systemd-сервіс і правила firewall"
+
+[[entry]]
+attr = "syncthing"
+option = "services.syncthing.enable"
+why = "user-сервіс і відкриття портів"
+
+[[entry]]
+attr = "flatpak"
+option = "services.flatpak.enable"
+why = "потрібні портали і системний репозиторій"

@@ -1,0 +1,12 @@
+# Rust
+target/
+**/target/
+
+# Стан інструментів
+*.bak
+*.tmp
+result
+result-*
+
+# Локальні секрети/експерименти
+*.local.nix

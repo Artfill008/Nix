@@ -1,0 +1,29 @@
+# ЗГЕНЕРОВАНО matugen. Не редагувати.
+# Брутальна геометрія: гострі кути, товста рамка, без тіней.
+font=Inter 11
+background-color={{colors.surface_container.default.hex}}
+text-color={{colors.on_surface.default.hex}}
+border-color={{colors.primary.default.hex}}
+progress-color=over {{colors.primary_container.default.hex}}
+
+border-size=3
+border-radius=0
+padding=12
+margin=8
+width=380
+height=160
+icon-path=/run/current-system/sw/share/icons/Papirus-Dark
+max-icon-size=48
+default-timeout=6000
+ignore-timeout=0
+layer=overlay
+anchor=top-right
+
+[urgency=low]
+border-color={{colors.outline.default.hex}}
+default-timeout=3000
+
+[urgency=critical]
+border-color={{colors.error.default.hex}}
+text-color={{colors.on_surface.default.hex}}
+default-timeout=0

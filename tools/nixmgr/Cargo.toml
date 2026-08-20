@@ -1,0 +1,23 @@
+[package]
+name = "nixmgr"
+version = "0.1.0"
+edition = "2021"
+description = "Декларативний менеджер пакетів для NixOS: фазі-пошук → атрибут → файл → rebuild → відкат"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+anyhow = "1"
+
+# Нечіткий пошук. nucleo-matcher — той самий движок, що в helix і yazi:
+# він ранжує за якістю збігу, а не просто фільтрує.
+# Альтернатива — fuzzy-matcher (skim); програла якістю ранжування.
+nucleo-matcher = "0.3"
+
+# Інтерактивний вибір зі списку кандидатів у CLI.
+# Коли дійде до GTK4/Relm4 — цей шар просто замінюється на список у вікні,
+# а весь код нижче (search/meta/edit/rebuild) лишається без змін.
+dialoguer = { version = "0.11", default-features = false }
