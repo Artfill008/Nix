@@ -224,3 +224,65 @@ A-133 (SafeBooru API — недоступний і з мережі агента)
 12. **A-170** — рішення про ім'я хоста (потребує тебе, не коду).
 
 Кроки 1-3 обов'язково послідовні. Кроки 4, 9, 10, 11 незалежні один від одного.
+
+---
+
+# REMEDIATION PASS — 2026-08-20
+
+Комміти: `ec37517`, `858497c`, `7b132e0`, `38aa174`.
+Старі findings **не видалені** — нижче їхній стан після виправлень.
+
+## Що фактично запускалось у цьому проході
+
+| Перевірка | Результат |
+|---|---|
+| `bash -n bootstrap.sh` | **exit 0** |
+| `cargo check --offline` × 2 крейти | **exit 0**, 0 попереджень |
+| баланс дужок, 33 `.nix` | пройдено |
+| дублі атрибутів (scope-aware) | 3 відомі хибні спрацювання, передивлені вручну |
+| існування імпортів | пройдено |
+| `nix flake check` / `eval` / `build` | **НЕ ЗАПУСКАЛИСЬ — у середовищі немає `nix`** |
+| `shellcheck` | **НЕ ЗАПУСКАВСЯ — немає бінарника** |
+
+## Стан попередніх findings
+
+| ID | Було | Стало | Як саме |
+|---|---|---|---|
+| A-001 | BLOCKER: немає flake.lock | **BLOCKED-ON-DEVICE** | Згенерувати без `nix` неможливо. `bootstrap.sh` крок 7 створює його на машині і вимагає закомітити |
+| A-002 | BLOCKER: fakeHash у msiklm | **RESOLVED (обхід)** | Прибрано з `packages.<system>`, тож `nix flake check` більше не падає. Повний SHA підставлено. Хеш рахує bootstrap крок 6 |
+| A-003 | BLOCKER: fakeHash у дефолтній збірці | **RESOLVED** | Дефолт бере `msi-ec` із nixpkgs (справжній хеш). Своя ревізія — opt-in `overrideSource` + assertion |
+| A-004 | скорочений rev | **RESOLVED** | Повний 40-символьний SHA |
+| A-020 | SUPERSEDED: Snapper | **RESOLVED** | Замінено на btrbk згідно D-024 |
+| A-022 | @snapshots не змонтований | **RESOLVED** | Додано `/.btrfs` (subvolid=5) |
+| A-040 | uwsm × autostart дублювання | **RESOLVED (як задокументовано)** | autostart ідемпотентний під обома; пояснено в `desktop.nix` |
+| A-041 | два записи сесії | **RESOLVED (свідоме рішення)** | Другий запис лишено як recovery-шлях, задокументовано |
+| A-042 | OSD не працює | **RESOLVED** | Бінди на `swayosd-client` + системний `swayosd-libinput-backend` |
+| A-043 | дубльовані udev-правила | **RESOLVED** | `services.udev.packages = [ pkgs.swayosd ]` |
+| A-044 | kanshi без служби | **RESOLVED** | User-сервіс + конфіг із трьома профілями |
+| A-045 | конфлікт SUPER+SHIFT+l | **RESOLVED** | Блокування на SUPER+Escape |
+| A-046 | `view,0` при tag_num=9 | **RESOLVED** | Бінд прибрано, `tag_num=9` задано явно |
+| A-062 | MIME у двох місцях | **RESOLVED, серйозніше ніж вважалось** | Див. A-190 нижче |
+| A-072 | 32-бітна графіка безумовна | **ВІДКРИТО** | Не чіпав: прив'язка до gaming вимагає перевірки, що Flatpak-GFN не потребує 32-біт |
+| A-111 | GFN репозиторій | **BLOCKED-ON-DEVICE** | `flatpak search geforcenow` на машині |
+| A-122 | немає шаблонів теми для локскріна/ReGreet | **ВІДКРИТО** | REQ-244..246 |
+| A-131 | moewall не пише source URL | **ВІДКРИТО** | REQ-377 |
+| A-132 | moewall без retry | **ВІДКРИТО** | REQ-378 |
+| A-133 | SafeBooru API | **BLOCKED-ON-DEVICE** | Хост заблокований проксі агента |
+| A-143 | nixmgr без локу | **ВІДКРИТО** | REQ-342 |
+| A-152 | gt72 без fan/rgb/wallpaper | **ВІДКРИТО** | REQ-349 |
+| A-153 | gt72.sh без shellcheck | **BLOCKED-ON-DEVICE** | Немає бінарника; `writeShellApplication` перевірить під час першої збірки |
+| A-170 | ім'я хоста | **OPEN** | Потрібне твоє рішення |
+| A-184 | coolerGuard × thermald | **BLOCKED-ON-DEVICE** | Процедура перевірки — `HARDWARE-VALIDATION.md §5` |
+
+## Нові findings цього проходу
+
+| ID | Підсистема | Проблема | Доказ | Серйозність | Стан |
+|---|---|---|---|---|---|
+| A-190 | Програми | `home/default.nix` встановлював **повний старий набір** (nemo, imv, mpv, zathura, smile, font-manager, mission-center) паралельно з libadwaita-набором із `apps.nix`. По дві програми на роль; `SUPER+e` відкривав nemo | git diff `7b132e0` | **HIGH** | **RESOLVED** |
+| A-191 | MIME | `~/.config/mimeapps.list` вказував на zathura/imv — програми, яких у системі вже немає. Має вищий пріоритет за `/etc`, тож подвійний клік по PDF не робив би **нічого** | `home/default.nix` до `7b132e0` | **HIGH** | **RESOLVED** |
+| A-192 | Bootstrap | Детекція і політика заліза не були розділені: автоматизація мусила або затерти опції монтування, або втратити UUID | `hosts/gt72s/hardware-configuration.nix` до `38aa174` | HIGH | **RESOLVED** |
+
+**A-190/A-191 — це промах першого аудиту.** Я перевірив `modules/apps.nix` і
+`modules/desktop.nix`, але не список пакетів у `home/default.nix`, і тому
+оцінив дублювання MIME як MEDIUM «два джерела», хоча насправді там був
+непрацездатний набір асоціацій.
