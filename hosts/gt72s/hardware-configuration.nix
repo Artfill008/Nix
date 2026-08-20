@@ -1,12 +1,16 @@
-# УВАГА: цей файл — ШАБЛОН. Він НЕ згенерований на твоїй машині.
+# ПОЛІТИКА ЗАЛІЗА для MSI GT72S 6QE.
 #
-# Перед першою збіркою зроби так:
-#   sudo nixos-generate-config --root /mnt --no-filesystems   # у live-середовищі
-# або, якщо система вже стоїть:
-#   sudo nixos-generate-config --show-hardware-config
-# і ЗАМІНИ вміст цього файлу згенерованим, залишивши мої btrfs-опції нижче.
+# Тут НЕМАЄ жодного UUID. Вони живуть у ./disk-ids.nix, який генерує
+# bootstrap.sh із реального `blkid` цієї машини.
 #
-# UUID нижче — плейсхолдери. Реальні бери з `blkid` або `lsblk -f`.
+# Причина розділення: `nixos-generate-config` створює власний
+# hardware-configuration.nix із ДЕФОЛТНИМИ опціями монтування. Якби bootstrap
+# підставляв його файл цілком, ми б щоразу втрачали compress=zstd,
+# discard=async, noatime і саму розкладку підтомів. Тому:
+#
+#   детекція  →  disk-ids.nix               (генерується, машинозалежне)
+#   політика  →  цей файл                   (кураторське, у git)
+#
 {
   config,
   lib,
@@ -14,10 +18,50 @@
   modulesPath,
   ...
 }:
+let
+  # Скорочення, щоб нижче читалось.
+  disk = config.gt72s.disk;
+
+  # Спільні опції монтування для всіх підтомів btrfs.
+  # Винесені в одне місце, щоб не розійшлися між підтомами при правках.
+  #   compress=zstd:1 — рівень 1, не 3: на NVMe вузьке місце CPU, а не диск.
+  #   noatime         — прибирає запис часу доступу при кожному читанні.
+  #   ssd             — алокатор під SSD (btrfs зазвичай визначає сам).
+  #   space_cache=v2  — новий формат кешу вільного місця, швидше монтується.
+  #   discard=async   — TRIM у фоні; краще за періодичний fstrim.
+  btrfsOpts = [
+    "compress=zstd:1"
+    "noatime"
+    "ssd"
+    "space_cache=v2"
+    "discard=async"
+  ];
+
+  # Один підтом = одна функція, щоб не копіювати шість однакових блоків.
+  subvol = name: {
+    device = "/dev/disk/by-uuid/${disk.rootUuid}";
+    fsType = "btrfs";
+    options = [ "subvol=${name}" ] ++ btrfsOpts;
+  };
+in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
+    ./disk-ids.nix
   ];
+
+  options.gt72s.disk = {
+    rootUuid = lib.mkOption {
+      type = lib.types.str;
+      description = "UUID btrfs-розділу. Задається у ./disk-ids.nix.";
+    };
+    espUuid = lib.mkOption {
+      type = lib.types.str;
+      description = "UUID EFI-розділу. Задається у ./disk-ids.nix.";
+    };
+  };
+
+  config = {
 
   # ── initrd ──────────────────────────────────────────────────────────────────
   # nvme — щоб побачити 970 EVO Plus; xhci_pci/usb_storage — USB-клавіатура і
@@ -38,71 +82,19 @@
   boot.extraModulePackages = [ ];
 
   # ── Файлові системи ─────────────────────────────────────────────────────────
-  # btrfs із підтомами. Опції підібрані під NVMe + SSD:
-  #   compress=zstd:1 — рівень 1, не 3: на NVMe вузьке місце — CPU, не диск.
-  #                     zstd:1 дає ~2x стиснення майже безкоштовно.
-  #   noatime         — прибирає запис часу доступу при кожному читанні.
-  #   ssd             — btrfs-алокатор під SSD (зазвичай визначає сам, ставимо явно).
-  #   space_cache=v2  — новий формат кешу вільного місця, швидше монтується.
-  #   discard=async   — TRIM у фоні, не блокує операції (краще за fstrim-таймер).
-  #
-  # TODO: заміни UUID на свої.
-  fileSystems."/" = {
-    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
-    fsType = "btrfs";
-    options = [
-      "subvol=@"
-      "compress=zstd:1"
-      "noatime"
-      "ssd"
-      "space_cache=v2"
-      "discard=async"
-    ];
-  };
+  # Опції монтування задані один раз у `btrfsOpts` вгорі файлу.
+  # UUID сюди приходить із ./disk-ids.nix — його генерує bootstrap.sh.
+  fileSystems."/" = subvol "@";
 
-  fileSystems."/home" = {
-    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
-    fsType = "btrfs";
-    options = [
-      "subvol=@home"
-      "compress=zstd:1"
-      "noatime"
-      "ssd"
-      "space_cache=v2"
-      "discard=async"
-    ];
-  };
+  fileSystems."/home" = subvol "@home";
 
   # /nix окремим підтомом і БЕЗ compress-force: стор і так переважно стиснений,
   # а компресія на кожному читанні бінарників з'їдає CPU.
-  fileSystems."/nix" = {
-    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
-    fsType = "btrfs";
-    options = [
-      "subvol=@nix"
-      "compress=zstd:1"
-      "noatime"
-      "ssd"
-      "space_cache=v2"
-      "discard=async"
-    ];
-  };
+  fileSystems."/nix" = subvol "@nix";
 
   # Окремий підтом під снапшоти. Тримати /var/log поза @ корисно, бо інакше
   # кожен снапшот кореня тягне за собою журнали.
-  fileSystems."/var/log" = {
-    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
-    fsType = "btrfs";
-    options = [
-      "subvol=@log"
-      "compress=zstd:1"
-      "noatime"
-      "ssd"
-      "space_cache=v2"
-      "discard=async"
-    ];
-    neededForBoot = true;
-  };
+  fileSystems."/var/log" = subvol "@log" // { neededForBoot = true; };
 
   # ── btrfs top-level ─────────────────────────────────────────────────────────
   # subvolid=5 — це КОРІНЬ файлової системи, над усіма підтомами.
@@ -114,27 +106,16 @@
   # noexec/nosuid/nodev: тут не запускається нічого, це суто службова точка.
   # TODO: той самий UUID, що й у решти підтомів.
   fileSystems."/.btrfs" = {
-    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
+    device = "/dev/disk/by-uuid/${disk.rootUuid}";
     fsType = "btrfs";
-    options = [
-      "subvolid=5"
-      "noatime"
-      "ssd"
-      "space_cache=v2"
-      "nosuid"
-      "nodev"
-      "noexec"
-    ];
+    options = [ "subvolid=5" "noatime" "ssd" "space_cache=v2" "nosuid" "nodev" "noexec" ];
   };
 
   # TODO: заміни UUID ESP-розділу (він короткий, вигляду 1234-ABCD).
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/0000-0000";
+    device = "/dev/disk/by-uuid/${disk.espUuid}";
     fsType = "vfat";
-    options = [
-      "fmask=0077"
-      "dmask=0077"
-    ];
+    options = [ "fmask=0077" "dmask=0077" ];
   };
 
   # Swap-розділу немає — свідомо. Замість нього zram (див. modules/performance.nix).
@@ -161,4 +142,5 @@
   # Тому НЕ вмикаємо hardware.nvidia.prime і не тягнемо intel-media-driver
   # для рендера — але лишаємо i915 доступним, якщо колись переключиш MUX.
   # TODO: якщо в BIOS увімкнеш Optimus/switchable — треба буде додати prime-конфіг.
+  };
 }

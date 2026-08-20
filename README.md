@@ -11,9 +11,17 @@ Daily driver: flakes + home-manager, композитор **mangowc**, драй�
 flake.nix                          вхідна точка, канал nixos-unstable
 hosts/gt72s/
   default.nix                      склейка модулів, локаль, юзер, nix-налаштування
-  hardware-configuration.nix       ⚠ ШАБЛОН — замінити згенерованим
+  hardware-configuration.nix       ПОЛІТИКА заліза (без UUID)
+  disk-ids.nix                     ⚙ ГЕНЕРУЄ bootstrap.sh — лише UUID цієї машини
 modules/
-  nvidia.nix                       ядро 6.12 LTS + legacy_580 + Wayland-змінні
+  kernel.nix                       гілка ядра як опція + assertion на пару з NVIDIA
+  nvidia.nix                       legacy_580 + Wayland-змінні
+  storage.nix                      btrbk, SMART, coredump
+  apps.nix                         щоденні програми, MIME, кодеки
+  dev.nix                          AI-агенти, build-інфраструктура, podman
+  android.nix                      Android Studio, adb, nix-ld
+  flatpak.nix                      Flathub + GeForce NOW
+  health.nix                       gt72 + acceptance checklist
   performance.nix                  scx_lavd, zram, oomd, sysctl, MGLRU, TuneD
   desktop.nix                      весь стек оболонки: бар, лаунчер, портали...
   virtualisation.nix               libvirt + OVMF + machine.slice
@@ -35,6 +43,121 @@ pkgs/msiklm/                       derivation для MSIKLM (немає в nixpk
 tools/moewall/                     Rust: автошпалери (компілюється)
 tools/nixmgr/                      Rust: менеджер пакетів (скелет, компілюється)
 docs/shell-stack.md                чесно про те, де болітиме без DE
+```
+
+---
+
+## FRESH INSTALL
+
+Сценарій від нуля до робочого десктопу.
+
+### 1. Постав мінімальний NixOS
+
+Під час розмітки створи **btrfs** із підтомами:
+
+```
+@   @home   @nix   @log   @snapshots
+```
+
+Swap-розділ **не створюй** — у конфізі zram на 16 ГБ.
+Завантаження має бути **UEFI**, не Legacy.
+
+### 2. Забезпеч мережу і root
+
+Далі потрібні лише робочий інтернет і `sudo`.
+
+### 3. Поклади репозиторій
+
+```bash
+sudo git clone <URL> /etc/nixos-gt72s
+cd /etc/nixos-gt72s
+```
+
+Каталог може бути будь-яким — bootstrap працює звідти, де лежить.
+
+### 4. Одна команда
+
+```bash
+sudo ./bootstrap.sh
+```
+
+Скрипт сам:
+
+1. перевірить, що це NixOS, UEFI, btrfs, і що GPU — GM204;
+2. збереже конфіг установника в `/var/backups/gt72s-bootstrap/<дата>/`;
+3. запише **реальні UUID** розділів у `hosts/gt72s/disk-ids.nix`;
+4. порахує хеш `msiklm` (для RGB), якщо зможе;
+5. створить `flake.lock`, якщо його ще немає;
+6. прожене `nix flake check` і точкові `nix eval`;
+7. **збере** систему — і зупиниться, якщо збірка впала;
+8. активує через `switch`;
+9. надрукує, що ввімкнено, що ні, і як відкотитись.
+
+Перевірити все, крім активації:
+
+```bash
+sudo ./bootstrap.sh --dry-run
+```
+
+### 5. Перезавантажся
+
+```bash
+sudo reboot
+```
+
+Обов'язково: змінюються ядро і драйвер NVIDIA.
+
+### 6. Перевір
+
+Увійди через ReGreet, сесія **«Mango (UWSM)»**. Потім:
+
+```bash
+gt72 health              # з tty або терміналу
+gt72 health session      # обов'язково з-під сесії Mango
+cat /etc/fennec/acceptance-test.md
+```
+
+### 7. Закоміть згенероване
+
+```bash
+git add flake.lock hosts/gt72s/disk-ids.nix pkgs/msiklm/default.nix
+git commit -m "bootstrap: пін інпутів і UUID цієї машини"
+```
+
+`flake.lock` — це source of truth для версій. Без коміту наступна збірка
+може приїхати з іншим nixpkgs.
+
+### 8. Вмикай експериментальне ПО ОДНОМУ
+
+Не всі одразу — інакше не зрозумієш, що саме зламалось.
+Порядок і команди перевірки — у `docs/HARDWARE-VALIDATION.md`.
+
+---
+
+## MANUAL INSTALL (для налагодження)
+
+Якщо bootstrap не підходить або треба зрозуміти, що він робить:
+
+```bash
+# 1. UUID
+lsblk -f
+$EDITOR hosts/gt72s/disk-ids.nix
+
+# 2. Пін інпутів
+nix flake lock
+
+# 3. Перевірка без збірки
+nix flake check --no-build
+
+# 4. Що саме приїде
+nix eval .#nixosConfigurations.fennec.config.boot.kernelPackages.kernel.version
+nix eval .#nixosConfigurations.fennec.config.hardware.nvidia.package.version
+
+# 5. Збірка без активації
+nixos-rebuild build --flake .#fennec
+
+# 6. Активація
+sudo nixos-rebuild switch --flake .#fennec
 ```
 
 ---
