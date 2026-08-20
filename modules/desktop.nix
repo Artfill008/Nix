@@ -316,6 +316,33 @@
     # демон у пам'яті і зайві кадри на 4 ГБ VRAM)
 
     # ── XDG ───────────────────────────────────────────────────────────────────
+    # ── OSD ───────────────────────────────────────────────────────────────────
+    # swayosd — екранні індикатори гучності/яскравості/CapsLock.
+    # Без нього Fn-клавіші «працюють, але нічого не видно», і ти не знаєш,
+    # чи натиснулось. У готовому DE це вбудовано; у зібраному стеку — окремий
+    # компонент, і це рівно той клас речей, які найчастіше забувають.
+    # Виграв: має і D-Bus-сервер, і власний libinput-backend, тобто ловить
+    # клавіші сам, без bind-ів у композиторі.
+    # Програв wob: це просто смужка на pipe, без жодної логіки.
+    # Програв avizo: те саме, але менш живий проєкт.
+    swayosd
+
+    # ── Дисплеї ───────────────────────────────────────────────────────────────
+    # kanshi — профілі виходів, що застосовуються на hotplug.
+    # Саме він робить «підключив другий монітор — воно саме розклалось».
+    # Програв way-displays: вміє те саме, але його конфіг гірше генерується
+    # з Nix. Програв nwg-displays: це GUI-редактор, а не демон.
+    kanshi
+    nwg-displays # GUI поверх kanshi, коли хочеться мишею
+
+    # ── Запис екрана ──────────────────────────────────────────────────────────
+    # gpu-screen-recorder — ГОЛОВНИЙ інструмент запису на цій машині.
+    # Використовує NVENC: кодування апаратне, CPU практично не задіяний.
+    # Це важливо саме тут — GM204 НЕ вміє апаратно декодувати HEVC,
+    # але КОДУВАТИ H.264 через NVENC вміє чудово.
+    # wf-recorder вище лишається як запасний софтовий шлях.
+    gpu-screen-recorder
+
     xdg-utils # xdg-open
     glib # gsettings — HM ним ставить GTK-налаштування
     gsettings-desktop-schemas
@@ -324,6 +351,56 @@
   # Автозапуск polkit-агента як user-сервісу.
   # Без агента будь-яка дія, що вимагає авторизації (монтування чужого диска,
   # запуск virt-manager), просто мовчки провалиться.
+  # ── uwsm: менеджер сесії ────────────────────────────────────────────────────
+  # НАЙВАЖЛИВІША ВІДСУТНЯ ДЕТАЛЬ у більшості зібраних вручну стеків.
+  #
+  # Mango сам по собі запускається — але сесія навколо нього лишається
+  # напівзібраною: systemd --user не знає, що графічна сесія почалась,
+  # D-Bus-активовані служби не бачать WAYLAND_DISPLAY, а graphical-session.target
+  # не досягається. Наслідки виглядають як випадкові баги: портал не бачить
+  # композитора, скріншот-портал мовчить, автозапуск працює через раз.
+  #
+  # uwsm піднімає композитор ВСЕРЕДИНІ правильно налаштованої systemd-сесії:
+  # експортує середовище в systemd і D-Bus, тримає graphical-session.target,
+  # і коректно зупиняє все при виході.
+  #
+  # Альтернатива — робити те саме руками через dbus-update-activation-environment
+  # і купу After=/WantedBy=. Працює, але ламається від кожної зміни.
+  programs.uwsm = {
+    enable = true;
+    waylandCompositors.mango = {
+      prettyName = "Mango";
+      comment = "Mango (dwl + scenefx) під керуванням UWSM";
+      binPath = "/run/current-system/sw/bin/mango";
+    };
+  };
+
+  # ── swayosd ─────────────────────────────────────────────────────────────────
+  # Системна частина: демон, що слухає клавіші на рівні libinput.
+  systemd.user.services.swayosd = {
+    description = "Екранні індикатори гучності та яскравості";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.swayosd}/bin/swayosd-server";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+  };
+
+  # Яскравість через swayosd вимагає прав на /sys/class/backlight.
+  # Група video цього не дає для запису — потрібне udev-правило.
+  services.udev.extraRules = ''
+    # Дозволяємо групі video керувати підсвіткою (і Intel, і NVIDIA-вузол).
+    ACTION=="add", SUBSYSTEM=="backlight", RUN+="${pkgs.coreutils}/bin/chgrp video /sys/class/backlight/%k/brightness"
+    ACTION=="add", SUBSYSTEM=="backlight", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/backlight/%k/brightness"
+    # Те саме для світлодіодів клавіатури (CapsLock-індикатор swayosd).
+    ACTION=="add", SUBSYSTEM=="leds", RUN+="${pkgs.coreutils}/bin/chgrp input /sys/class/leds/%k/brightness"
+    ACTION=="add", SUBSYSTEM=="leds", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/leds/%k/brightness"
+  '';
+
   systemd.user.services.polkit-gnome-authentication-agent-1 = {
     description = "polkit-gnome authentication agent";
     wantedBy = [ "graphical-session.target" ];

@@ -12,10 +12,27 @@
   imports = [
     ./hardware-configuration.nix
 
+    # ── Система ───────────────────────────────────────────────────────────────
+    ../../modules/kernel.nix       # вибір гілки ядра + assertion на пару з NVIDIA
     ../../modules/nvidia.nix
     ../../modules/performance.nix
-    ../../modules/desktop.nix
+    ../../modules/storage.nix      # snapper, SMART, coredump
     ../../modules/virtualisation.nix
+
+    # ── Сесія і робочий стіл ──────────────────────────────────────────────────
+    ../../modules/desktop.nix
+
+    # ── Програми ──────────────────────────────────────────────────────────────
+    ../../modules/apps.nix         # щоденні програми, MIME, кодеки, мініатюри
+    ../../modules/dev.nix          # AI-агенти, build-інфраструктура, контейнери
+    ../../modules/android.nix      # Android Studio, adb, nix-ld, udev
+    ../../modules/flatpak.nix      # інфраструктура Flatpak + GeForce NOW
+    ../../modules/health.nix       # gt72 + перевірка «конфіг vs рантайм»
+
+    # ── Написані, але вимкнені ────────────────────────────────────────────────
+    # Кожен вмикається одним рядком нижче в цьому ж файлі.
+    ../../modules/gaming.nix       # fennec.gaming.enable
+    ../../modules/printing.nix     # fennec.printing.enable
 
     # Файл, яким володіє ТІЛЬКИ інструмент nixmgr. Руками не редагуємо.
     ../../modules/managed-packages.nix
@@ -48,6 +65,21 @@
 
   networking.hostName = hostname;
 
+  # ── Гілка ядра ──────────────────────────────────────────────────────────────
+  # За твоїм рішенням: 6.18 як база, 7.2 доступне одним рядком.
+  #
+  # Щоб перейти на 7.2, треба ДВА рядки — і це навмисно, а не незручність:
+  #     fennec.kernel.channel = "latest";
+  #     fennec.kernel.acknowledgeUntestedNvidia = true;
+  # Другий рядок існує, щоб ти не дізнався про несумісність з legacy_580
+  # уже після reboot. Деталі — у modules/kernel.nix.
+  fennec.kernel.channel = "default";
+
+  # ── Вимкнені за твоїм рішенням ──────────────────────────────────────────────
+  # Обидва модулі написані повністю. Вмикаються тут.
+  fennec.gaming.enable = false;   # основний ігровий шлях — GeForce NOW
+  fennec.printing.enable = false; # мінус три фонові служби і mDNS у мережі
+
   # NetworkManager, бо Wi-Fi + профілі + аплет у треї.
   # Програли: systemd-networkd (нема зручного GUI під Wi-Fi),
   # iwd напряму (менше жиру, але гірша інтеграція з nm-applet/blueman).
@@ -77,7 +109,19 @@
     "C.UTF-8/UTF-8"
   ];
 
-  # Розкладка консолі. Wayland-розкладка задається окремо у mango (xkb_rules_layout).
+  # ── Клавіатура ──────────────────────────────────────────────────────────────
+  # Одне джерело правди для розкладок. Його читають:
+  #   • ReGreet (екран логіну) — через services.xserver.xkb
+  #   • XWayland-програми (Android Studio, емулятор) — звідти ж
+  #   • Mango — окремо, у home/mango.nix (xkb_rules_layout=ua,us)
+  # Тримай ці два місця синхронними; health-check це перевіряє.
+  services.xserver.xkb = {
+    layout = "ua,us";
+    options = "grp:alt_shift_toggle";
+  };
+
+  # Консоль лишаємо на us: у tty ти набираєш шляхи і команди, а не текст.
+  # Кирилиця в tty без потреби лише заважає, коли треба щось полагодити.
   console.keyMap = "us";
 
   # ── Користувач ──────────────────────────────────────────────────────────────

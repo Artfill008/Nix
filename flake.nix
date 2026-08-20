@@ -26,9 +26,13 @@
     let
       system = "x86_64-linux";
 
-      # TODO: заміни на свої значення перед першою збіркою.
-      username = "user";
-      hostname = "gt72s";
+      # Ідентичність системи.
+      # hostname — це ІМ'Я МАШИНИ (fennec), а hosts/gt72s/ — це ПРОФІЛЬ ЗАЛІЗА.
+      # Розділення свідоме: завтра з'явиться hosts/gt72s/ для другого GT72S
+      # з іншим іменем, або hosts/thinkpad/ для іншої машини — і жодне з них
+      # не зачепить решту дерева.
+      username = "mango";
+      hostname = "fennec";
 
       # Оверлеї: наші власні пакети, яких немає в nixpkgs.
       overlays = [
@@ -75,7 +79,7 @@
 
       # Наші інструменти доступні як `nix build .#moewall` / `.#nixmgr` / `.#msiklm`.
       packages.${system} = {
-        inherit (pkgs) msiklm moewall nixmgr;
+        inherit (pkgs) msiklm moewall nixmgr gt72;
         default = pkgs.moewall;
       };
 

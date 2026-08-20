@@ -9,4 +9,9 @@ final: prev: {
 
   # Наш менеджер декларативних пакетів (Rust).
   nixmgr = final.callPackage ../tools/nixmgr { };
+
+  # Control plane машини: профілі, статус, health-check.
+  # Збирається через writeShellApplication, тобто shellcheck проганяється
+  # під час nixos-rebuild — помилка в скрипті завалить збірку, а не рантайм.
+  gt72 = final.callPackage ../pkgs/gt72 { };
 }
