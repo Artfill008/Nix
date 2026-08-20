@@ -467,13 +467,22 @@ check_storage() {
         fi
     fi
 
-    # Снапшоти
-    if command -v snapper >/dev/null 2>&1; then
+    # Снапшоти (btrbk, див. D-024)
+    if command -v btrbk >/dev/null 2>&1; then
         local snaps
-        snaps="$(snapper -c home list --columns number 2>/dev/null | tail -n +3 | wc -l || echo 0)"
-        report OK "snapper: /home" "$snaps снапшотів"
+        snaps="$(btrbk list snapshots 2>/dev/null | tail -n +2 | wc -l | tr -d ' ' || echo 0)"
+        if [[ "$snaps" -gt 0 ]]; then
+            report OK "btrbk: снапшоти" "$snaps шт."
+        else
+            report WARNING "btrbk: снапшоти" "жодного — таймер ще не спрацював?"
+        fi
+        if [[ -d /.btrfs/@snapshots ]]; then
+            report OK "btrbk: каталог" "/.btrfs/@snapshots існує"
+        else
+            report FAIL "btrbk: каталог" "/.btrfs/@snapshots відсутній — підтом не змонтований"
+        fi
     else
-        report WARNING "snapper" "не встановлений"
+        report "NOT-ENABLED" "btrbk" "не встановлений"
     fi
 }
 

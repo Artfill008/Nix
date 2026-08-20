@@ -104,6 +104,29 @@
     neededForBoot = true;
   };
 
+  # ── btrfs top-level ─────────────────────────────────────────────────────────
+  # subvolid=5 — це КОРІНЬ файлової системи, над усіма підтомами.
+  # Потрібен btrbk: щоб створювати снапшоти сусідніх підтомів (@ і @home)
+  # і складати їх у @snapshots, він має бачити їх усі з одного місця.
+  # Без цього монтування @snapshots існує на диску, але недосяжний —
+  # саме це і було знайдено аудитом як A-022.
+  #
+  # noexec/nosuid/nodev: тут не запускається нічого, це суто службова точка.
+  # TODO: той самий UUID, що й у решти підтомів.
+  fileSystems."/.btrfs" = {
+    device = "/dev/disk/by-uuid/00000000-0000-0000-0000-000000000000";
+    fsType = "btrfs";
+    options = [
+      "subvolid=5"
+      "noatime"
+      "ssd"
+      "space_cache=v2"
+      "nosuid"
+      "nodev"
+      "noexec"
+    ];
+  };
+
   # TODO: заміни UUID ESP-розділу (він короткий, вигляду 1234-ABCD).
   fileSystems."/boot" = {
     device = "/dev/disk/by-uuid/0000-0000";
